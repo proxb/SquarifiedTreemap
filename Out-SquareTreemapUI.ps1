@@ -466,7 +466,7 @@ Function Out-SquarifiedTreeMap {
                 $Rectangle.Height = $Height 
                 $Rectangle.Fill = $Color  
                 $Rectangle.Stroke = 'Black' 
-                $Rectangle.StrokeThickness = .1 
+                $Rectangle.StrokeThickness = .3 
                 $Rectangle.ToolTip = $Tooltip
                 $Rectangle
             }                 
