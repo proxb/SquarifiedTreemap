@@ -14,6 +14,8 @@ Code to generate a squarified treemap UI for data visualization
 #endregion Example using randomized data
 ```
 
+![alt tag](https://github.com/proxb/SquarifiedTreemap/blob/master/Images/sqtreemap1.png)
+
 ###Example 2
 ```PowerShell
 #region Example using Filesystem against my current drive
@@ -42,3 +44,5 @@ $FileInfo |
 Out-SquarifiedTreeMap -Width 600 -Height 200 -LabelProperty Fullname -DataProperty Count -HeatmapProperty Size -ToolTip $Tooltip
 #endregion Create a custom tooltip
 ```
+
+![alt tag](https://github.com/proxb/SquarifiedTreemap/blob/master/Images/sqtreemap2.png)
