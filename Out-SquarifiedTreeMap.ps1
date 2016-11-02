@@ -1,4 +1,4 @@
-Function Out-SquarifiedTreeMap {
+﻿Function Out-SquarifiedTreeMap {
     <#
     .SYNOPSIS
         Used to present a Squarified Treemap and optional heatmap for visualizing data.
@@ -48,15 +48,37 @@ Function Out-SquarifiedTreeMap {
         Height
         Coordinate
         ObjectData (This contains the object that was passed to this function)
+
+    .PARAMETER ShowLabel
+        Displays a label on top of each item in the treemap. Default is the LabelProperty and if that does not
+        have any data, then it will use the DataProperty of the item.
+
+        Possible values:
+
+        LabelProperty
+        DataProperty
+        HeatmapProperty
+    
+    .PARAMETER PassThru
+        Allows you to select a single item on the treemap that will close out the UI and output the corresponding
+        original object based on the selected item for use with another command.
+
+        You can move this UI around as long as you are holding down on the CTRL key prior to left clicking on the UI and 
+        then drag it around. This will prevent the UI from closing and the object being presented.
         
     .NOTES
         Name:  Out-SquarifiedTreeMap
         Author: Boe Prox
         Version History:
+            1.2 //Boe Prox - 10/31/2016
+                -Allowed for displaying a label on the UI
+            1.1 //Boe Prox - 10/28/2016
+                -Removed runspaces to allow piping of data from UI into another command
+                -Allowed for selecting of a single item to output original object
             1.0 //Boe Prox - 12/07/2015
                 -Production Version
     .EXAMPLE
-        1..8|Out-SquarifiedTreeMap -Width 600 -Height 200 -MaxHeatMapSize 15
+        1..8|Out-SquarifiedTreeMap -Width 600 -Height 200 -MaxHeatMapSize 8 -ShowLabel HeatmapProperty
 
         Description
         -----------
@@ -65,15 +87,24 @@ Function Out-SquarifiedTreeMap {
         the UI was also set as well.
 
     .EXAMPLE
-        Get-Process | 
-        Out-SquarifiedTreeMap -LabelProperty ProcessName -DataProperty WS -HeatmapProperty WS -Width 600 -Height 400
+        $Tooltip = {
+        @"
+    Process Name <PID>:   $($This.LabelProperty) <$($This.ObjectData.Id)>     
+    WorkingSet Memory(MB): $([math]::Round(($This.DataProperty/1MB),2))
+"@
+        }
+        Get-Process | Sort-Object -prop WS -Descending | Select -First 8 | 
+        Out-SquarifiedTreeMap -Tooltip $Tooltip -LabelProperty ProcessName -DataProperty WS -HeatmapProperty WS -Width 600 -Height 400 `
+        -PassThru -ShowLabel LabelProperty | 
+        Stop-Process -WhatIf
 
         Description
         -----------
         A Squarified Treemap with a heat map is created of all running processes. To support the default tooltip,
         the LabelProperty was chosen with the ProcessName. The DataProperty was used with WS for the sizing of the 
         squares in the UI based on memory. The same property is used for the Heatmap to help show the largest and 
-        smallest consumer of memory.
+        smallest consumer of memory. Upon clicking one of the items on the UI, it will output the original object
+        so it can be used in another command as the -PassThru parameter was used.
 
     .EXAMPLE
         $FileInfo = Get-ChildItem -Directory|ForEach {
@@ -81,22 +112,23 @@ Function Out-SquarifiedTreeMap {
             [pscustomobject]@{
                 Name = $_.name
                 Fullname = $_.fullname
-                Count = [int]$Files.Count
-                Size = [int]$Files.Sum
+                Count = [int64]$Files.Count
+                Size = [int64]$Files.Sum
             }
         }
 
         $Tooltip = {
         @"
-        Fullname = $($This.LabelProperty)
+        Name = $($This.LabelProperty)
+        Fullname = $($This.ObjectData.FullName)
         FileCount = $($This.Dataproperty)
         Size = $([math]::round(($This.HeatmapProperty/1MB),2)) MB
-        "@
+"@
         }
 
         $FileInfo | 
-        Out-SquarifiedTreeMap -Width 600 -Height 200 -LabelProperty Fullname `
-        -DataProperty Count -HeatmapProperty Size -ToolTip $Tooltip        
+        Out-SquarifiedTreeMap -Width 800 -Height 600 -LabelProperty Name `
+        -DataProperty Count -HeatmapProperty Size -ToolTip $Tooltip -ShowLabel LabelProperty -PassThru     
 
         Description
         -----------
@@ -119,9 +151,13 @@ Function Out-SquarifiedTreeMap {
         [string]$HeatmapProperty,
         [ValidateNotNullorEmpty()]
         [int64]$MaxHeatMapSize,
-        [scriptblock]$ToolTip
+        [scriptblock]$ToolTip,
+        [ValidateSet('LabelProperty','DataProperty','HeatmapProperty')]
+        [string]$ShowLabel,
+        [switch]$PassThru
     )
     Begin {
+        Write-Verbose "[BEGIN]Starting Function"
         #region Helper Functions        
         Function New-SquareTreeMapData {
             [cmdletbinding()]
@@ -180,6 +216,7 @@ Function Out-SquarifiedTreeMap {
                 } 
 
                 #region Starting Data
+                $Tag = 1
                 $Row = 1
                 $Rectangle = New-Object System.Collections.ArrayList
                 $DecimalThreshold = .4
@@ -188,7 +225,8 @@ Function Out-SquarifiedTreeMap {
                     $Pipeline = $False 
                     Write-Verbose "Adding `$InputObject to list"       
                     [void]$TempData.AddRange($InputObject)
-                } Else {
+                } 
+                Else {
                     $Pipeline = $True
                 }
                 #Sort the data
@@ -213,7 +251,8 @@ Function Out-SquarifiedTreeMap {
                             $Stack.Push($_)
                         }
                     }    
-                } Else {
+                } 
+                Else {
                     $TempData | Sort-Object | ForEach {
                         #If it is 0, then it should not occupy space
                         If ($_ -gt 0) {
@@ -236,7 +275,8 @@ Function Out-SquarifiedTreeMap {
                     #Write-Verbose "Row: $Row"
                     If ($PSBoundParameters.ContainsKey('DataProperty')) {
                         $TotalArea = ($Stack | Measure-Object -Property $DataProperty -Sum).Sum
-                    } Else {
+                    } 
+                    Else {
                         $TotalArea = ($Stack | Measure-Object -Sum).Sum
                     }
                     #Write-Verbose 'Getting starting orientation'
@@ -250,7 +290,8 @@ Function Out-SquarifiedTreeMap {
                         [void]$List.Add($Stack.Pop())
                         If ($PSBoundParameters.ContainsKey('DataProperty')) {
                             $PercentArea = (($List | Measure-Object -Property $DataProperty -Sum).Sum/$TotalArea)
-                        } Else {
+                        } 
+                        Else {
                             $PercentArea = (($List | Measure-Object -Sum).Sum/$TotalArea)
                         }
                         #Write-Verbose "PercentArea: $($PercentArea)"
@@ -259,14 +300,16 @@ Function Out-SquarifiedTreeMap {
                     If ($List.Count -gt 1) {
                         If ($PSBoundParameters.ContainsKey('DataProperty')) {
                             $_area = ($List | Measure-Object -Property $DataProperty -Sum).Sum
-                        } Else {
+                        } 
+                        Else {
                             $_area = ($List | Measure-Object -Sum).Sum
                         }
                     }
                     $List | ForEach {
                         If ($PSBoundParameters.ContainsKey('DataProperty')) {
                             $Item = $_.$DataProperty
-                        } Else {
+                        } 
+                        Else {
                             $Item = $_
                         }
                         If ($PSBoundParameters.ContainsKey('LabelProperty')) {
@@ -274,7 +317,8 @@ Function Out-SquarifiedTreeMap {
                         }
                         If ($PSBoundParameters.ContainsKey('HeatmapProperty')) {
                             $HeatmapData = $_.$HeatmapProperty
-                        } ElseIf ($PSBoundParameters.ContainsKey('MaxHeatMapSize')){
+                        } 
+                        ElseIf ($PSBoundParameters.ContainsKey('MaxHeatMapSize')){
                             $HeatmapData = $_
                         }
                         Switch ($Orientation) {
@@ -284,7 +328,8 @@ Function Out-SquarifiedTreeMap {
                                 Write-Verbose "BlockWidth: $($BlockWidth)"
                                 If ($Iteration -eq 1) {
                                     $BlockHeight = $Height
-                                } Else {
+                                } 
+                                Else {
                                     #Get block height
                                     $_percentarea = ($Item / $_area)
                                     $BlockHeight = ($_percentarea*$Height)
@@ -297,7 +342,8 @@ Function Out-SquarifiedTreeMap {
                                 Write-Verbose "BlockHeight: $($BlockHeight)"
                                 If ($Iteration -eq 1) {
                                     $BlockWidth = $Width
-                                } Else {
+                                } 
+                                Else {
                                     #Get block width
                                     $_percentarea = ($Item / $_area)
                                     $BlockWidth = ($_percentarea*$Width) 
@@ -325,8 +371,9 @@ Function Out-SquarifiedTreeMap {
                                     $Coordinate = New-Object -Typename treemap.coordinate -ArgumentList $X,$CurrentY
                                 }
                             }                
-                        }
+                        }                        
                         [pscustomobject]@{
+                            Tag = $Tag
                             LabelProperty = $Label
                             DataProperty = $Item
                             HeatmapProperty = $HeatmapData
@@ -336,7 +383,8 @@ Function Out-SquarifiedTreeMap {
                             Height = $BlockHeight
                             Coordinate = $Coordinate
                             ObjectData = $_
-                        }                     
+                        }   
+                        $Tag++                  
                         $PreviousWidth = $BlockWidth
                         $PreviousHeight = $BlockHeight
                         $TotalBlockHeight = $TotalBlockHeight + $BlockHeight
@@ -345,7 +393,8 @@ Function Out-SquarifiedTreeMap {
                     If ($Orientation -eq 'Vertical') {
                         $CurrentX = $BlockWidth + $CurrentX
                         $Width = $Width - $BlockWidth
-                    } Else {
+                    } 
+                    Else {
                         $CurrentY = $CurrentY + $BlockHeight
                         $Height = $Height - $BlockHeight
                     }
@@ -356,13 +405,35 @@ Function Out-SquarifiedTreeMap {
                     $FirstCoordRun = $True  
                 }
             }
-        }  
+        }
+        Function Color {
+            Param($Decimal)
+            If ($Decimal -gt 1) {
+                $Decimal = 1
+            }
+            $Red = ([float](2.0) * $Decimal)
+            $Red = If ($Red -gt 1) {
+                255
+            } 
+            Else {
+                $Red * 255
+            }
+            $Green = (([float](2.0) * (1 - $Decimal)))
+            $Green = If ($Green -gt 1) {
+                255
+            } 
+            Else {
+                $Green * 255
+            }
+            ([windows.media.color]::FromRgb($Red, $Green, 0)).ToString()
+        }   
         Function New-Rectangle {
             Param(
                 $Width,
                 $Height,
                 $Color,
-                $Tooltip
+                $Tooltip,
+                $Tag
             )
             $Rectangle = new-object System.Windows.Shapes.Rectangle
             $Rectangle.Width = $Width
@@ -370,17 +441,77 @@ Function Out-SquarifiedTreeMap {
             $Rectangle.Fill = $Color  
             $Rectangle.Stroke = 'Black' 
             $Rectangle.ToolTip = $Tooltip
-            $Rectangle
-        }          
+            $Rectangle.Tag = $Tag
+            Return $Rectangle
+        }  
+        Function New-ViewBox {
+            Param(
+                $Width,
+                $Height,
+                $Text
+            )
+            $Label = new-object System.Windows.Controls.Label
+            $Viewbox = new-object System.Windows.Controls.Viewbox
+            $DropShadow = New-Object System.Windows.Media.Effects.DropShadowEffect
+            $DropShadow.Opacity = 5
+            $DropShadow.BlurRadius = 5
+            $DropShadow.Color = 'Black'
+            $DropShadow.ShadowDepth = 0
+            $Viewbox.Stretch = 'Uniform'
+            $Viewbox.Width = $Width
+            $Viewbox.Height = $Height
+            $Label.IsHitTestVisible = $False
+            $Label.FontFamily = 'Calibri'
+            $Label.FontWeight = 'Bold'
+            $Label.Foreground = 'White'
+            $Label.Content = $Text
+            $Label.Effect = $DropShadow
+            $Viewbox.AddChild($Label)
+            Return $Viewbox
+        }              
         #endregion Helper Functions
-        #region Synchronized Hashtables for Runspace
-        $RunspaceHash = [hashtable]::Synchronized(@{})
-        $Global:DataHash = [hashtable]::Synchronized(@{
+
+        $TempData = New-Object System.Collections.ArrayList
+        If ($PSBoundParameters.ContainsKey('InputObject')) {
+            $Pipeline = $False 
+            Write-Verbose "Adding `$InputObject to list"       
+            [void]$TempData.AddRange($InputObject)
+        } 
+        Else {
+            $Pipeline = $True
+        }
+        Write-Verbose "[BEGIN] End Begin"
+    }
+    Process {
+        Write-Verbose "[PROCESS]"
+        If ($Pipeline) {
+            Write-Verbose "Adding $($_) to list"
+            [void]$TempData.Add($_)
+        } 
+    }
+    End {
+        Write-Verbose "[END] Begin End"
+        #region  Hashtables 
+        $DataHash = [hashtable]::Synchronized(@{
             Width = $Width
             Height = $Height           
         })
-        #endregion Synchronized Hashtables for Runspace
-
+        #endregion  Hashtables
+        If ($PSBoundParameters.ContainsKey('PassThru')) {
+            [void]$PSBoundParameters.Remove('PassThru')
+            $Script:IsPassThru = $True
+        }
+        Else {
+            $Script:IsPassThru = $False
+        }
+        Write-Verbose "[PassThruBoundParam] $($Script:IsPassThru)"
+        If ($PSBoundParameters.ContainsKey('ShowLabel')) {
+            [void]$PSBoundParameters.Remove('ShowLabel')
+            $Script:ShowLabel = $True
+        }
+        Else {
+            $Script:ShowLabel = $False
+        }
         If (-NOT $PSBoundParameters.ContainsKey('Width')) {
             $PSBoundParameters['Width'] = $Width
         }
@@ -391,28 +522,15 @@ Function Out-SquarifiedTreeMap {
             [void]$PSBoundParameters.Remove('ToolTip')
             $HasToolTip = $True 
             $DataHash['ToolTip'] = $ToolTip           
-        } Else {
+        } 
+        Else {
             $HasToolTip = $False
         }
         $DataHash['HasToolTip'] = $HasToolTip
-
-        $TempData = New-Object System.Collections.ArrayList
-        If ($PSBoundParameters.ContainsKey('InputObject')) {
-            $Pipeline = $False 
-            Write-Verbose "Adding `$InputObject to list"       
-            [void]$TempData.AddRange($InputObject)
-        } Else {
-            $Pipeline = $True
-        }
-    }
-    Process {
-        If ($Pipeline) {
-            Write-Verbose "Adding $($_) to list"
-            [void]$TempData.Add($_)
-        } 
-    }
-    End {
         $PSBoundParameters['InputObject'] = $TempData
+        If ($PSBoundParameters.ContainsKey('PipelineVariable')) {
+            [void]$PSBoundParameters.Remove('PipelineVariable')
+        }
         $TreeMapData = New-SquareTreeMapData @PSBoundParameters
         $DataHash['TreeMapData'] = $TreeMapData
         If ($PSBoundParameters.ContainsKey('HeatmapProperty')) {
@@ -425,100 +543,87 @@ Function Out-SquarifiedTreeMap {
             $DataHash['MaxHeatMapSize'] = $MaxHeatMapSize
             $DataHash['Maximum'] = $Maximum
         } 
-        
-        #Begin Runspace Build
-        $Runspacehash.runspace = [RunspaceFactory]::CreateRunspace()
-        $Runspacehash.runspace.ApartmentState = "STA"
-        $Runspacehash.runspace.Open() 
-        $Runspacehash.runspace.SessionStateProxy.SetVariable("Runspacehash",$Runspacehash)
-        $Runspacehash.runspace.SessionStateProxy.SetVariable("DataHash",$DataHash)
-        $Runspacehash.PowerShell = {Add-Type -AssemblyName PresentationCore,PresentationFramework,WindowsBase}.GetPowerShell() 
-        $Runspacehash.PowerShell.Runspace = $Runspacehash.runspace 
-        $Runspacehash.Handle = $Runspacehash.PowerShell.AddScript({
-            Function Color {
-                Param($Decimal)
-                If ($Decimal -gt 1) {
-                    $Decimal = 1
-                }
-                $Red = ([float](2.0) * $Decimal)
-                $Red = If ($Red -gt 1) {
-                    255
-                } Else {
-                    $Red * 255
-                }
-                $Green = (([float](2.0) * (1 - $Decimal)))
-                $Green = If ($Green -gt 1) {
-                    255
-                } Else {
-                    $Green * 255
-                }
-                ([windows.media.color]::FromRgb($Red, $Green, 0))
-            }   
-            Function New-Rectangle {
-                Param(
-                    $Width,
-                    $Height,
-                    $Color,
-                    $Tooltip
-                )
-                $Rectangle = new-object System.Windows.Shapes.Rectangle
-                $Rectangle.Width = $Width
-                $Rectangle.Height = $Height 
-                $Rectangle.Fill = $Color  
-                $Rectangle.Stroke = 'Black' 
-                $Rectangle.StrokeThickness = .3 
-                $Rectangle.ToolTip = $Tooltip
-                $Rectangle
-            }                 
-            #region XAML
-            [xml]$xaml = @"
-            <Window 
-                xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                x:Name="Window" Title="Initial Window" WindowStartupLocation = "CenterScreen"
-                Width = "$($DataHash.Width)" Height = "$($DataHash.Height)" ShowInTaskbar = "True" ResizeMode = "NoResize"
-                WindowStyle = "None">    
-                    <Canvas x:Name="Canvas">
-                    </Canvas>
-            </Window>
+                              
+        #region XAML
+        [xml]$xaml = @"
+        <Window 
+            xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+            x:Name="Window" Title="Initial Window" WindowStartupLocation = "CenterScreen"
+            Width = "$($DataHash.Width)" Height = "$($DataHash.Height)" ShowInTaskbar = "True" ResizeMode = "NoResize"
+            WindowStyle = "None">    
+                <Canvas x:Name="Canvas">
+                </Canvas>
+        </Window>
 "@
-            #endregion XAML
+        #endregion XAML
 
-            #region Connect to Control 
-            $reader=(New-Object System.Xml.XmlNodeReader $xaml)
-            $Window=[Windows.Markup.XamlReader]::Load( $reader )
-            $xaml.SelectNodes("//*[@*[contains(translate(name(.),'n','N'),'Name')]]") | ForEach {
-                New-Variable -Name $_.Name -Value $Window.FindName($_.Name) -Force -ErrorAction SilentlyContinue -Scope Script
-            }
-            #endregion Connect to Control 
+        #region Connect to Control 
+        $reader=(New-Object System.Xml.XmlNodeReader $xaml)
+        $Window=[Windows.Markup.XamlReader]::Load( $reader )
+        $xaml.SelectNodes("//*[@*[contains(translate(name(.),'n','N'),'Name')]]") | ForEach {
+            New-Variable -Name $_.Name -Value $Window.FindName($_.Name) -Force -ErrorAction SilentlyContinue -Scope Script
+        }
+        #endregion Connect to Control 
 
-            #region Control Events
-            $Window.Add_MouseRightButtonUp({
-                $This.close()
-            })
-            $Window.Add_MouseLeftButtonDown({
+        #region Control Events
+        $Window.Add_MouseRightButtonUp({
+            $This.close()
+        })
+        $Window.Add_MouseLeftButtonDown({
+            $Script:KeyDown = [System.Windows.Input.Keyboard]::IsKeyDown("RightCtrl") -OR [System.Windows.Input.Keyboard]::IsKeyDown("LeftCtrl")
+            Write-Verbose "[MouseButtonDown-CTRLKeyDown] $($Script:KeyDown)"
+            Write-Verbose "[IsPassThru] $($Script:IsPassThru)"
+            If (($Script:IsPassThru -AND $Script:KeyDown) -OR -NOT $Script:IsPassThru) {
+                Write-Verbose "DragMove"
                 $This.DragMove()
-            })
-            $Window.Add_Closed({
-                Start-Sleep -Milliseconds 100
-                $RunspaceHash.PowerShell.EndInvoke($RunspaceHash.Handle)
-            })
-            #endregion Control Events
+            }
+        })
+            
+        #region TabControl event handler
+        [System.Windows.RoutedEventHandler]$Global:RectangleKeyDownChangeHandler = { 
+            Write-Verbose "[KeyDwnhandler-CTRLKeyDown] $($Script:KeyDown)"
+            If ($Script:KeyDown) {
+                Try {
+                    Write-Verbose "[KEYUP] DragMove"
+                    $Window.DragMove()
+                }
+                Catch {Write-Warning $_}
+            }
+        }
+        $Window.AddHandler([System.Windows.Shapes.Rectangle]::MouseLeftButtonUpEvent, $RectangleKeyDownChangeHandler)
 
-            #region Begin building the Squarified Tree Map
-            $DataHash.TreeMapData | ForEach {
+        [System.Windows.RoutedEventHandler]$Global:RectangleKeyUpChangeHandler = { 
+            If ($Script:IsPassThru -AND -NOT $Script:KeyDown) {               
+                If ($_.OriginalSource -is [System.Windows.Shapes.Rectangle]) { 
+                    $Source = $_.OriginalSource           
+                    $Script:Result = $DataHash.TreeMapData | Where {
+                        $_.Tag -eq $Source.Tag
+                    } | Select-Object -ExpandProperty ObjectData
+                    $Window.Close()
+                }
+            }
+        }
+        $Window.AddHandler([System.Windows.Shapes.Rectangle]::MouseLeftButtonUpEvent, $RectangleKeyUpChangeHandler)
+        #endregion TabControl event handler
+        #endregion Control Events
+
+        #region Begin building the Squarified Tree Map
+        $DataHash.TreeMapData | ForEach {
             $This = $_
             If ($DataHash.ContainsKey('HeatmapProperty')) {
                 $Decimal = $_.HeatmapProperty / $DataHash.Maximum
                 $Color = (Color -Decimal $Decimal)    
-            } ElseIf ($DataHash.ContainsKey('MaxHeatMapSize')) {
+            } 
+            ElseIf ($DataHash.ContainsKey('MaxHeatMapSize')) {
                 $Decimal = $_.HeatmapProperty / $DataHash.Maximum
                 $Color = (Color -Decimal $Decimal)  
-            } Else {
+            } 
+            Else {
                 Write-Verbose 'Default color used'
                 $Color = 'Green'
             }
-            Write-Verbose "Color: $($Color.ToString())"
+            Write-Verbose "Color: $($Color)"
             Write-Verbose "Creating Rectangle for $($_.Data)"
             If (-NOT $DataHash.HasToolTip) {
                 $__Tooltip = @"   
@@ -526,21 +631,33 @@ Label:   $($This.LabelProperty)
 Data:    $($This.DataProperty)
 HeatMap: $($This.HeatmapProperty)
 "@
-            } Else {
+            } 
+            Else {
                 #Scope gets weird after setting the variable in a new runspace so we 
-                #need to update the scriptblock
+                #need to update the scriptblock -- Might not be needed after removing runspaces
                 $ToolTip = [scriptblock]::Create($DataHash.ToolTip.ToString())
                 $__Tooltip = $ToolTip.Invoke() | Out-String
             }
-                $Rectangle = New-Rectangle -Width $_.Width -Height $_.Height -Color $Color.ToString() -Tooltip $__Tooltip
-                [void]$Canvas.Children.Add($Rectangle)         
-                [System.Windows.Controls.Canvas]::SetLeft($Rectangle,$_.Coordinate.X)
-                [System.Windows.Controls.Canvas]::SetTop($Rectangle,$_.Coordinate.Y)
+            $Rectangle = New-Rectangle -Width $_.Width -Height $_.Height -Color $Color -Tooltip $__Tooltip -Tag $_.Tag
+            [void]$Canvas.Children.Add($Rectangle) 
+            [System.Windows.Controls.Canvas]::SetLeft($Rectangle,$_.Coordinate.X)
+            [System.Windows.Controls.Canvas]::SetTop($Rectangle,$_.Coordinate.Y)
+            If ($ShowLabel) {                
+                $Viewbox = New-ViewBox -Width $_.Width -Height $_.Height -Text $_.$ShowLabel
+                [void]$Canvas.Children.Add($Viewbox) 
+                [System.Windows.Controls.Canvas]::SetLeft($Viewbox,$_.Coordinate.X)
+                [System.Windows.Controls.Canvas]::SetTop($Viewbox,$_.Coordinate.Y)
             }
-            #endregion Begin building the Squarified Tree Map
+        }
+        #endregion Begin building the Squarified Tree Map
 
-            #Show UI
-            [void]$Window.ShowDialog()
-        }).BeginInvoke()
+        #Show UI
+        Write-Verbose "[END] Show UI"
+        [void]$Window.ShowDialog()
+        Write-Verbose "[END] UI Close"
+        If ($IsPassThru) {
+            Write-Verbose "Output Object"
+            $Result
+        }
     }
 }

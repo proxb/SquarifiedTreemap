@@ -4,8 +4,8 @@ $FileInfo = Get-ChildItem -Directory|ForEach {
     [pscustomobject]@{
         Name = $_.name
         Fullname = $_.fullname
-        Count = [int]$Files.Count
-        Size = [int]$Files.Sum
+        Count = [int64]$Files.Count
+        Size = [int64]$Files.Sum
     }
 }
 #endregion Example using Filesystem against my current drive
@@ -21,8 +21,22 @@ Size = $([math]::round(($This.HeatmapProperty/1MB),2)) MB
 
 #Create the UI
 $FileInfo | 
-Out-SquarifiedTreeMap -Width 600 -Height 200 -LabelProperty Fullname -DataProperty Count -HeatmapProperty Size -ToolTip $Tooltip
+Out-SquarifiedTreeMap -Width 800 -Height 600 -LabelProperty Name `
+-DataProperty Count -HeatmapProperty Size -ToolTip $Tooltip -ShowLabel LabelProperty -PassThru    
 #endregion Create a custom tooltip
+
+#region Stopping a high memory process
+$Tooltip = {
+@"
+Process Name <PID>:   $($This.LabelProperty) <$($This.ObjectData.Id)>     
+WorkingSet Memory(MB): $([math]::Round(($This.DataProperty/1MB),2))
+"@
+}
+Get-Process | Sort-Object -prop WS -Descending | Select -First 8 | 
+Out-SquarifiedTreeMap -Tooltip $Tooltip -LabelProperty ProcessName -DataProperty WS -HeatmapProperty WS -Width 600 -Height 400 `
+-PassThru -ShowLabel LabelProperty | 
+Stop-Process -WhatIf
+#endregion Stopping a high memory process
 
 #region Example using Process WorkingSet Memory
 Get-Process | 
@@ -40,7 +54,7 @@ Out-SquarifiedTreeMap -LabelProperty ProcessName -DataProperty WS -HeatmapProper
         Count = (Get-Random -InputObject (1..50))
         Data = (Get-Random -InputObject (1..100))
     }
-} | Out-SquarifiedTreeMap -Width 600 -Height 200 -DataProperty Count -HeatmapProperty Data -LabelProperty Label
+} | Out-SquarifiedTreeMap -Width 600 -Height 200 -DataProperty Count -HeatmapProperty Data -LabelProperty Label -ShowLabel LabelProperty
 #endregion Example using randomized data
 
 #region Not using a HeatMap
