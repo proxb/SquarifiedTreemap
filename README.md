@@ -1,7 +1,6 @@
 # SquarifiedTreemap
 Code to generate a squarified treemap UI for data visualization
 
-###Example 1
 ```PowerShell
 #region Example using randomized data
 1..8 | ForEach{
@@ -16,7 +15,6 @@ Code to generate a squarified treemap UI for data visualization
 
 ![alt tag](https://github.com/proxb/SquarifiedTreemap/blob/master/Images/sqtreemap1.png)
 
-###Example 2
 ```PowerShell
 #region Example using Filesystem against my current drive
 $FileInfo = Get-ChildItem -Directory|ForEach {
