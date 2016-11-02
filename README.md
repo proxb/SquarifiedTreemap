@@ -16,7 +16,7 @@ Out-SquarifiedTreeMap -Tooltip $Tooltip -LabelProperty ProcessName -DataProperty
 Stop-Process -WhatIf
 #endregion Stopping a high memory process
 ```
-
+![alt tag](https://github.com/proxb/SquarifiedTreemap/blob/master/Images/SqTreeMap.png)
 
 ```PowerShell
 #region Example using randomized data
