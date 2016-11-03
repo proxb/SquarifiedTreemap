@@ -588,7 +588,7 @@
                     Write-Verbose "[KEYUP] DragMove"
                     $Window.DragMove()
                 }
-                Catch {Write-Warning $_}
+                Catch {}
             }
         }
         $Window.AddHandler([System.Windows.Shapes.Rectangle]::MouseLeftButtonUpEvent, $RectangleKeyDownChangeHandler)
