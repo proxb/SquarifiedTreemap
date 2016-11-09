@@ -50,14 +50,19 @@
         ObjectData (This contains the object that was passed to this function)
 
     .PARAMETER ShowLabel
-        Displays a label on top of each item in the treemap. Default is the LabelProperty and if that does not
-        have any data, then it will use the DataProperty of the item.
-
-        Possible values:
+        Custom label that will apply to rectangle in the UI. This must be a scriptblock that 
+        contains a here-string. The use of $This is allowed and contains the following 
+        available properties:
 
         LabelProperty
         DataProperty
         HeatmapProperty
+        Row
+        Orientation
+        Width
+        Height
+        Coordinate
+        ObjectData (This contains the object that was passed to this function)
     
     .PARAMETER PassThru
         Allows you to select a single item on the treemap that will close out the UI and output the corresponding
@@ -70,6 +75,8 @@
         Name:  Out-SquarifiedTreeMap
         Author: Boe Prox
         Version History:
+            1.3 //Boe Prox - 11/08/2016
+                -Updated ShowLable to accept scriptblock for more customizable labels
             1.2 //Boe Prox - 10/31/2016
                 -Allowed for displaying a label on the UI
             1.1 //Boe Prox - 10/28/2016
@@ -95,7 +102,7 @@
         }
         Get-Process | Sort-Object -prop WS -Descending | Select -First 8 | 
         Out-SquarifiedTreeMap -Tooltip $Tooltip -LabelProperty ProcessName -DataProperty WS -HeatmapProperty WS -Width 600 -Height 400 `
-        -PassThru -ShowLabel LabelProperty | 
+        -PassThru -ShowLabel {"$($This.LabelProperty) <$($This.ObjectData.ID)>"} | 
         Stop-Process -WhatIf
 
         Description
@@ -152,8 +159,7 @@
         [ValidateNotNullorEmpty()]
         [int64]$MaxHeatMapSize,
         [scriptblock]$ToolTip,
-        [ValidateSet('LabelProperty','DataProperty','HeatmapProperty')]
-        [string]$ShowLabel,
+        [scriptblock]$ShowLabel,
         [switch]$PassThru
     )
     Begin {
@@ -174,7 +180,8 @@
             Begin {
                 Try {
                     [void][treemap.coordinate]
-                } Catch {
+                } 
+                Catch {
                     Add-Type -TypeDefinition @"
                         using System;
                         namespace TreeMap
@@ -306,6 +313,7 @@
                         }
                     }
                     $List | ForEach {
+
                         If ($PSBoundParameters.ContainsKey('DataProperty')) {
                             $Item = $_.$DataProperty
                         } 
@@ -508,6 +516,7 @@
         If ($PSBoundParameters.ContainsKey('ShowLabel')) {
             [void]$PSBoundParameters.Remove('ShowLabel')
             $Script:ShowLabel = $True
+            $DataHash['ShowLabel'] = $ShowLabel  
         }
         Else {
             $Script:ShowLabel = $False
@@ -642,8 +651,10 @@ HeatMap: $($This.HeatmapProperty)
             [void]$Canvas.Children.Add($Rectangle) 
             [System.Windows.Controls.Canvas]::SetLeft($Rectangle,$_.Coordinate.X)
             [System.Windows.Controls.Canvas]::SetTop($Rectangle,$_.Coordinate.Y)
-            If ($ShowLabel) {                
-                $Viewbox = New-ViewBox -Width $_.Width -Height $_.Height -Text $_.$ShowLabel
+            If ($ShowLabel) {   
+                $ShowLabel = [scriptblock]::Create($DataHash.ShowLabel.ToString())
+                $__ShowLabel = $ShowLabel.Invoke() | Out-String             
+                $Viewbox = New-ViewBox -Width $_.Width -Height $_.Height -Text $__ShowLabel 
                 [void]$Canvas.Children.Add($Viewbox) 
                 [System.Windows.Controls.Canvas]::SetLeft($Viewbox,$_.Coordinate.X)
                 [System.Windows.Controls.Canvas]::SetTop($Viewbox,$_.Coordinate.Y)
