@@ -1,7 +1,7 @@
 # SquarifiedTreemap
 Code to generate a squarified treemap UI for data visualization
 
-### Now with Label and Passthru support!
+### Now with Customizable Label and Passthru support!
 ```PowerShell
 #region Stopping a high memory process
 $Tooltip = {
@@ -12,7 +12,7 @@ WorkingSet Memory(MB): $([math]::Round(($This.DataProperty/1MB),2))
 }
 Get-Process | Sort-Object -prop WS -Descending | Select -First 8 | 
 Out-SquarifiedTreeMap -Tooltip $Tooltip -LabelProperty ProcessName -DataProperty WS -HeatmapProperty WS -Width 800 -Height 600 `
--PassThru -ShowLabel LabelProperty | 
+-PassThru -ShowLabel {"$($This.LabelProperty) <$($This.ObjectData.ID)>"} | 
 Stop-Process -WhatIf
 #endregion Stopping a high memory process
 ```
