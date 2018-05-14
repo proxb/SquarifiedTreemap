@@ -488,6 +488,16 @@
         Else {
             $Pipeline = $True
         }
+        
+        #region ConsoleHost Support
+        If ($host.Name -eq 'ConsoleHost') {
+            Write-Verbose "Adding assemblies for ConsoleHost support"
+            Add-Type –assemblyName PresentationFramework
+            Add-Type –assemblyName PresentationCore
+            Add-Type –assemblyName WindowsBase
+        }
+        #endregion ConsoleHost Support
+        
         Write-Verbose "[BEGIN] End Begin"
     }
     Process {
